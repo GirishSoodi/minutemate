@@ -14,7 +14,7 @@ export function PageHeader() {
         </Button>
       </div>
       <h1 className="text-4xl font-bold tracking-tighter text-primary font-headline sm:text-5xl md:text-6xl">
-        Meeting Maestro
+        Minutemate
       </h1>
       <p className="mx-auto mt-4 max-w-2xl text-muted-foreground md:text-xl">
         Record or upload your meeting audio. Get a transcript, summary, and action items, all powered by AI.
