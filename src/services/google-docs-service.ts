@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -11,51 +10,34 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { promises as fs } from 'fs';
-import path from 'path';
-
-// Define paths for credentials and token files
-const CREDENTIALS_PATH = path.join(process.cwd(), 'src/google/credentials.json');
-const TOKEN_PATH = path.join(process.cwd(), 'src/google/token.json');
 
 /**
- * Load or refresh the authorization client.
+ * Load the authorization client using environment variables.
  */
 async function authorize(): Promise<OAuth2Client> {
-    let credentials;
-    try {
-        const credentialsContent = await fs.readFile(CREDENTIALS_PATH, 'utf8');
-        credentials = JSON.parse(credentialsContent);
-    } catch (err) {
-        throw new Error(
-            'Failed to load credentials.json. Please ensure you have downloaded your credentials from the Google Cloud Console and placed the file at src/google/credentials.json.'
-        );
-    }
+  const {
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI,
+    GOOGLE_REFRESH_TOKEN,
+  } = process.env;
 
-    const { client_secret, client_id, redirect_uris, project_id } = credentials.installed || credentials.web;
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI || !GOOGLE_REFRESH_TOKEN) {
+    throw new Error('Missing one or more Google OAuth environment variables.');
+  }
 
-    if (!client_id || !client_secret || client_id.includes('YOUR_CLIENT_ID')) {
-         throw new Error('Google client_id or client_secret is missing or incomplete in src/google/credentials.json. Please add them from your Google Cloud project.');
-    }
-     if (!project_id || project_id.includes('YOUR_PROJECT_ID')) {
-         throw new Error('Google project_id is missing or incomplete in src/google/credentials.json. Please add it from your Google Cloud project.');
-    }
+  const auth = new google.auth.OAuth2(
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI
+  );
 
-    const auth = new google.auth.OAuth2(client_id, client_secret, redirect_uris?.[0]);
+  auth.setCredentials({
+    refresh_token: GOOGLE_REFRESH_TOKEN,
+  });
 
-    try {
-        const tokenContent = await fs.readFile(TOKEN_PATH, 'utf8');
-        const token = JSON.parse(tokenContent);
-        auth.setCredentials(token);
-    } catch (tokenError) {
-        throw new Error(
-            'Failed to load token.json. This application cannot create it for you. Please run the one-time authorization script (`node auth.js`) locally to generate `token.json` and add it to the `src/google` directory.'
-        );
-    }
-
-    return auth;
+  return auth;
 }
-
 
 export const createGoogleDoc = ai.defineTool(
   {
@@ -106,12 +88,14 @@ export const createGoogleDoc = ai.defineTool(
 
       return { documentId, url };
     } catch (e: any) {
-        // Check for specific 'invalid_grant' error
-        if (e.message && e.message.includes('invalid_grant')) {
-             throw new Error("Google authentication failed due to an invalid token. Your `token.json` has likely expired. Please delete the `src/google/token.json` file and regenerate it by running `node auth.js` in your local terminal.");
-        }
-        console.error("Google Docs API Error:", e);
-        throw new Error(`Failed to create Google Doc: ${e.message}`);
+      if (e.message && e.message.includes('invalid_grant')) {
+        throw new Error(
+          'Google authentication failed due to an invalid or expired token. Please regenerate your refresh token and update the environment variable.'
+        );
+      }
+
+      console.error('Google Docs API Error:', e);
+      throw new Error(`Failed to create Google Doc: ${e.message}`);
     }
   }
 );
